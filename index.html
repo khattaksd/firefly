@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firefly — Agent Observability Spec</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f1117;
+      color: #e2e4e9;
+      line-height: 1.6;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+    h1 {
+      font-size: 2.2rem;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.25rem;
+    }
+    .subtitle {
+      color: #6b7280;
+      font-size: 1rem;
+      margin-bottom: 2rem;
+    }
+    h2 {
+      font-size: 1.4rem;
+      color: #f59e0b;
+      border-bottom: 1px solid #1f2937;
+      padding-bottom: 0.4rem;
+      margin: 2rem 0 1rem;
+    }
+    h3 {
+      font-size: 1.1rem;
+      color: #d1d5db;
+      margin: 1.5rem 0 0.5rem;
+    }
+    p, li { color: #c4c7cc; font-size: 0.95rem; }
+    code {
+      background: #1a1d27;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.88rem;
+      color: #a78bfa;
+    }
+    pre {
+      background: #1a1d27;
+      border: 1px solid #2d3142;
+      border-radius: 8px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: #e2e4e9;
+      font-size: 0.85rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+    }
+    th, td {
+      padding: 0.6rem 0.8rem;
+      text-align: left;
+      border-bottom: 1px solid #1f2937;
+      font-size: 0.88rem;
+    }
+    th {
+      color: #f59e0b;
+      font-weight: 600;
+      background: #11141c;
+    }
+    tr:hover { background: #11141c; }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-priority { background: #7c3aed33; color: #a78bfa; }
+    .badge-core { background: #f59e0b33; color: #fbbf24; }
+    .badge-nice { background: #22c55e33; color: #4ade80; }
+    blockquote {
+      border-left: 3px solid #f59e0b;
+      padding: 0.5rem 1rem;
+      margin: 1rem 0;
+      background: #1a1d27;
+      border-radius: 0 6px 6px 0;
+      color: #9ca3af;
+      font-style: italic;
+    }
+    ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+    li { margin: 0.3rem 0; }
+    .toc {
+      background: #11141c;
+      border: 1px solid #2d3142;
+      border-radius: 8px;
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .toc a {
+      color: #a78bfa;
+      text-decoration: none;
+    }
+    .toc a:hover { text-decoration: underline; }
+    .toc li { margin: 0.3rem 0; }
+  </style>
+</head>
+<body>
+
+<h1>🔥 Firefly</h1>
+<p class="subtitle">Agent Observability Platform — Technical Specification v0.1</p>
+
+<div class="toc">
+  <h3>Table of Contents</h3>
+  <ul>
+    <li><a href="#overview">1. Overview</a></li>
+    <li><a href="#sdk">2. SDK Design</a></li>
+    <li><a href="#ingestion">3. Ingestion Pipeline</a></li>
+    <li><a href="#backend">4. Backend API</a></li>
+    <li><a href="#trace-schema">5. Trace Data Model</a></li>
+    <li><a href="#frontend">6. Frontend</a></li>
+    <li><a href="#alerts">7. Alert Engine</a></li>
+    <li><a href="#onboarding">8. Onboarding Flow</a></li>
+  </ul>
+</div>
+
+<!-- ===== 1. OVERVIEW ===== -->
+<h2 id="overview">1. Overview</h2>
+
+<p>Firefly is an agent observability platform. It gives developers real-time visibility into how their AI agents behave — LLM calls, tool invocations, errors, costs, and conversation trees.</p>
+
+<blockquote>Core value prop: Instrument your agent in under 5 minutes. See everything in under 5 seconds.</blockquote>
+
+<table>
+  <tr><th>Component</th><th>Tech</th><th>Purpose</th></tr>
+  <tr><td>Python SDK</td><td>Python 3.11+</td><td>Instrument LangChain, CrewAI, custom agents</td></tr>
+  <tr><td>TypeScript SDK</td><td>Node 20+</td><td>Instrument LangChain.js, Vercel AI SDK</td></tr>
+  <tr><td>Go SDK</td><td>Go 1.22+</td><td>Middleware for production agents</td></tr>
+  <tr><td>Backend</td><td>FastAPI + Python</td><td>Ingestion API, query engine, alert engine</td></tr>
+  <tr><td>Storage</td><td>ClickHouse + PostgreSQL</td><td>Trace storage + metadata/alert rules</td></tr>
+  <tr><td>Real-time</td><td>WebSocket (FastAPI)</td><td>Live dashboard updates</td></tr>
+  <tr><td>Frontend</td><td>Next.js 15 + React</td><td>Dashboard, trace explorer, replay</td></tr>
+</table>
+
+<!-- ===== 2. SDK ===== -->
+<h2 id="sdk">2. SDK Design</h2>
+
+<h3>2.1 Python SDK — Core Patterns</h3>
+
+<pre><code># pip install firefly-sdk
+
+from firefly import observe_agent, instrument_langchain
+
+# Option A: One decorator for custom agents
+@observe_agent("sales-outreach", workspace="acme")
+def run(prompt: str):
+    response = llm.invoke(prompt)
+    return response
+
+# Option B: Zero-code-change for LangChain
+instrument_langchain()</code></pre>
+
+<h3>2.2 TypeScript SDK</h3>
+
+<pre><code>// npm install @firefly/sdk
+
+import { observeAgent } from '@firefly/sdk';
+
+@observeAgent('sales-outreach', { workspace: 'acme' })
+async function run(prompt: string) {
+  const response = await llm.chat(messages);
+  return response;
+}
+
+// Auto-instrument LangChain.js
+import { instrumentLangChain } from '@firefly/sdk/langchain';
+instrumentLangChain();</code></pre>
+
+<h3>2.3 Go SDK</h3>
+
+<pre><code>// go get github.com/firefly/go-sdk
+
+import "github.com/firefly/go-sdk"
+
+tracer := firefly.NewTracer(firefly.Config{
+  Workspace: "acme",
+  APIKey:    os.Getenv("FIREFLY_API_KEY"),
+})
+
+ctx := tracer.Start(context.Background(), "sales-outreach")
+defer tracer.End(ctx)
+
+response, err := llm.Chat(ctx, messages)</code></pre>
+
+<h3>2.4 Shared SDK Contract</h3>
+
+<ul>
+  <li>Batch flush: every 1 second or 100 events</li>
+  <li>Offline queue: disk-backed, syncs on reconnect</li>
+  <li>Idempotent: dedup by <code>trace_id</code></li>
+  <li>Test mode: captures traces in-memory for unit tests</li>
+  <li>Single ingestion endpoint for all languages</li>
+</ul>
+
+<!-- ===== 3. INGESTION ===== -->
+<h2 id="ingestion">3. Ingestion Pipeline</h2>
+
+<pre><code>POST /api/v1/ingest/traces
+Authorization: Bearer {api_key}
+Content-Type: application/json
+
+[
+  {
+    "trace_id": "abc-123",
+    "agent_id": "sales-outreach",
+    "workspace": "acme",
+    "timestamp": "2026-05-10T14:23:01Z",
+    "event_type": "llm_call",
+    "llm_provider": "openai",
+    "model": "gpt-4o",
+    "prompt_tokens": 342,
+    "completion_tokens": 128,
+    "latency_ms": 840,
+    "status": "success",
+    "parent_span_id": "abc-123.parent"
+  }
+]</code></pre>
+
+<ul>
+  <li>Response: <code>202 Accepted</code> (async processing)</li>
+  <li>Schema validation via Pydantic/Zod</li>
+  <li>Write to ClickHouse time-series table</li>
+  <li>Fan out via WebSocket to connected clients</li>
+</ul>
+
+<!-- ===== 4. BACKEND ===== -->
+<h2 id="backend">4. Backend API</h2>
+
+<h3>4.1 Core Endpoints</h3>
+
+<table>
+  <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+  <tr><td>POST</td><td>/api/v1/ingest/traces</td><td>Batch trace ingestion</td></tr>
+  <tr><td>GET</td><td>/api/v1/traces</td><td>Query traces (filter by agent, time, status)</td></tr>
+  <tr><td>GET</td><td>/api/v1/traces/{trace_id}/replay</td><td>Full conversation tree</td></tr>
+  <tr><td>POST</td><td>/api/v1/alerts</td><td>Create alert rule</td></tr>
+  <tr><td>GET</td><td>/api/v1/alerts</td><td>List alert rules</td></tr>
+  <tr><td>GET</td><td>/api/v1/costs</td><td>Cost aggregation per agent</td></tr>
+  <tr><td>WS</td><td>/ws/traces</td><td>Real-time trace stream</td></tr>
+</table>
+
+<!-- ===== 5. SCHEMA ===== -->
+<h2 id="trace-schema">5. Trace Data Model</h2>
+
+<pre><code>{
+  "trace_id": "string (UUID)",        // unique conversation trace
+  "agent_id": "string",               // agent identifier
+  "workspace": "string",              // tenant identifier
+  "timestamp": "ISO 8601 UTC",
+  "event_type": "llm_call | tool_call | error | retry | stream_chunk",
+  "llm_provider": "openai | anthropic | google | azure | custom",
+  "model": "string",
+  "prompt_tokens": "int",
+  "completion_tokens": "int",
+  "total_tokens": "int",
+  "latency_ms": "int",
+  "status": "success | error | timeout | rate_limited",
+  "error_message": "string (optional)",
+  "parent_span_id": "string (optional)",
+  "tool_name": "string (optional)",
+  "tool_input": "object (optional)",
+  "tool_output": "object (optional)",
+  "span_metadata": "object (optional)"
+}</code></pre>
+
+<!-- ===== 6. FRONTEND ===== -->
+<h2 id="frontend">6. Frontend</h2>
+
+<h3>6.1 Key Screens</h3>
+
+<ul>
+  <li><strong>Dashboard</strong> — Per-agent health cards (success rate, cost/hr, error rate, active conversations)</li>
+  <li><strong>Trace Explorer</strong> — Search/filter traces by agent, time range, error type. Expand conversation tree.</li>
+  <li><strong>Conversation Replay</strong> — Step-by-step visualization: each LLM call, tool call, and response in order.</li>
+  <li><strong>Alerts</strong> — Configure alert rules. View alert history.</li>
+  <li><strong>Cost Analytics</strong> — Per-agent cost over time, per-model breakdown.</li>
+</ul>
+
+<h3>6.2 Real-time</h3>
+<p>WebSocket server pushes new traces to frontend as they arrive. No polling. Dashboard updates live.</p>
+
+<!-- ===== 7. ALERTS ===== -->
+<h2 id="alerts">7. Alert Engine</h2>
+
+<pre><code>POST /api/v1/alerts
+{
+  "agent_id": "sales-outreach",
+  "metric": "success_rate",
+  "threshold": 0.90,
+  "window_minutes": 60,
+  "channel": "slack",
+  "webhook_url": "https://hooks.slack.com/..."
+}</code></pre>
+
+<p>Supported metrics: <code>success_rate</code>, <code>error_rate</code>, <code>avg_latency_ms</code>, <code>cost_per_hour</code>, <code>token_spike</code></p>
+
+<p>Supported channels: Slack, email, webhook. Rules stored in PostgreSQL, evaluated every 30 seconds via cron.</p>
+
+<!-- ===== 8. ONBOARDING ===== -->
+<h2 id="onboarding">8. Onboarding Flow</h2>
+
+<ol>
+  <li>User signs up → gets workspace + API key</li>
+  <li><code>pip install firefly-sdk</code> (or npm / go get)</li>
+  <li>Add one line to agent code: <code>instrument_langchain()</code> or <code>@observe_agent("my-agent")</code></li>
+  <li>Run agent → traces appear on dashboard in real-time</li>
+  <li>Done. No config files. No YAML. No hell.</li>
+</ol>
+
+<hr style="border-color: #1f2937; margin: 2rem 0;">
+
+<p style="color: #6b7280; font-size: 0.85rem;">Spec v0.1 — May 2026 — For internal development use</p>
+
+</body>
+</html>
