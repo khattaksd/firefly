@@ -1,34 +1,36 @@
 # 🔥 Firefly — Agent Observability Platform
 
-## Spec v0.1
-
-### Overview
-Firefly is an agent observability platform. Real-time visibility into AI agent behavior:
-LLM calls, tool invocations, errors, costs, conversation trees.
-
-**Core value prop**: Instrument your agent in under 5 minutes. See everything in under 5 seconds.
-
-### Tech Stack
-| Component | Tech |
-|-----------|------|
-| Python SDK | Python 3.11+ |
-| TypeScript SDK | Node 20+ |
-| Go SDK | Go 1.22+ |
-| Backend | FastAPI + Python |
-| Storage | ClickHouse + PostgreSQL |
-| Real-time | WebSocket (FastAPI) |
-| Frontend | Next.js 15 + React |
+## Spec v0.1 (MVP)
 
 ---
 
-### SDK Design
+## What This Is
+Real-time observability for AI agents. Track LLM calls, errors, and costs across Python agents. One decorator to instrument, one dashboard to observe.
 
-#### Python
+**Core value prop**: Instrument your agent in under 5 minutes. See everything in under 5 seconds.
+
+---
+
+## MVP Tech Stack
+| Layer | Tech |
+|-------|------|
+| Python SDK | Python 3.11+ |
+| Backend | FastAPI + Python |
+| Storage | ClickHouse |
+| Real-time | WebSocket (FastAPI) |
+| Frontend | Next.js 15 + React |
+| Hosting | Hetzner CX22 VPS ($6/mo) + Cloudflare Tunnel |
+| Total cost | ~$6-8/mo |
+
+---
+
+## Python SDK
+
 ```bash
 pip install firefly-sdk
 ```
 
-Option A — decorator:
+### Option A — Decorator
 ```python
 from firefly import observe_agent
 
@@ -38,52 +40,45 @@ def run(prompt: str):
     return response
 ```
 
-Option B — zero code change for LangChain:
-```python
-from firefly import instrument_langchain
-instrument_langchain()
-```
-
-#### TypeScript
-```bash
-npm install @firefly/sdk
-```
-
-```typescript
-import { observeAgent } from '@firefly/sdk';
-
-@observeAgent('sales-outreach', { workspace: 'acme' })
-async function run(prompt: string) {
-  const response = await llm.chat(messages);
-  return response;
-}
-```
-
-#### Go
-```bash
-go get github.com/firefly/go-sdk
-```
-
-```go
-tracer := firefly.NewTracer(firefly.Config{
-  Workspace: "acme",
-  APIKey:    os.Getenv("FIREFLY_API_KEY"),
-})
-ctx := tracer.Start(context.Background(), "sales-outreach")
-defer tracer.End(ctx)
-```
-
-#### Shared SDK Contract
-- Batch flush: every 1 second or 100 events
-- Offline queue: disk-backed, syncs on reconnect
-- Idempotent: dedup by trace_id
-- Test mode: captures traces in-memory for unit tests
+### Shared SDK Contract
+- **Batch flush**: every 1 second or 100 events
+- **Offline queue**: disk-backed, syncs on reconnect
+- **Idempotent**: dedup by `trace_id`
+- **Test mode**: captures traces in-memory for unit tests
 
 ---
 
-### Ingestion Pipeline
+## Trace Schema
 
-POST /api/v1/ingest/traces
+```json
+{
+  "trace_id": "UUID",
+  "agent_id": "string",
+  "workspace": "string",
+  "timestamp": "ISO 8601 UTC",
+  "event_type": "llm_call | error",
+  "llm_provider": "openai | anthropic | google",
+  "model": "string",
+  "prompt_tokens": 342,
+  "completion_tokens": 128,
+  "latency_ms": 840,
+  "status": "success | error | timeout",
+  "error_message": "string (optional)"
+}
+```
+
+---
+
+## Backend API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/ingest/traces` | Batch trace ingestion |
+| GET | `/api/v1/traces` | Query traces (filter by agent, time, status) |
+| GET | `/api/v1/traces/{trace_id}` | Single trace details |
+| WS | `/ws/traces` | Real-time trace stream |
+
+### Ingestion Request
 ```json
 [
   {
@@ -97,95 +92,109 @@ POST /api/v1/ingest/traces
     "prompt_tokens": 342,
     "completion_tokens": 128,
     "latency_ms": 840,
-    "status": "success",
-    "parent_span_id": "abc-123.parent"
+    "status": "success"
   }
 ]
 ```
 
-Response: 202 Accepted
+Response: `202 Accepted`
 
 ---
 
-### Backend API
+## Frontend
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/v1/ingest/traces | Batch trace ingestion |
-| GET | /api/v1/traces | Query traces |
-| GET | /api/v1/traces/{trace_id}/replay | Full conversation tree |
-| POST | /api/v1/alerts | Create alert rule |
-| GET | /api/v1/alerts | List alert rules |
-| GET | /api/v1/costs | Cost aggregation |
-| WS | /ws/traces | Real-time stream |
-
----
-
-### Trace Data Model
-
-```json
-{
-  "trace_id": "UUID",
-  "agent_id": "string",
-  "workspace": "string",
-  "timestamp": "ISO 8601 UTC",
-  "event_type": "llm_call | tool_call | error | retry | stream_chunk",
-  "llm_provider": "openai | anthropic | google | azure | custom",
-  "model": "string",
-  "prompt_tokens": 342,
-  "completion_tokens": 128,
-  "total_tokens": 470,
-  "latency_ms": 840,
-  "status": "success | error | timeout | rate_limited",
-  "error_message": "string (optional)",
-  "parent_span_id": "string (optional)",
-  "tool_name": "string (optional)",
-  "tool_input": "object (optional)",
-  "tool_output": "object (optional)",
-  "span_metadata": "object (optional)"
-}
-```
-
----
-
-### Frontend
-
-Key screens:
-1. Dashboard — per-agent health cards
-2. Trace Explorer — search/filter traces
-3. Conversation Replay — step-by-step visualization
-4. Alerts — configure rules, view history
-5. Cost Analytics — per-agent cost over time
+### MVP Screens
+1. **Dashboard** — basic agent health cards (success rate, avg latency)
+2. **Trace Explorer** — search/filter traces by agent/time/status
+3. **Cost Analytics** — simple token count per agent
 
 Real-time via WebSocket, no polling.
 
 ---
 
-### Alert Engine
-
-```json
-{
-  "agent_id": "sales-outreach",
-  "metric": "success_rate",
-  "threshold": 0.90,
-  "window_minutes": 60,
-  "channel": "slack",
-  "webhook_url": "https://hooks.slack.com/..."
-}
-```
-
-Metrics: success_rate, error_rate, avg_latency_ms, cost_per_hour, token_spike
-Channels: Slack, email, webhook
-Evaluated every 30s via cron.
+## Authentication & Security
+- Simple API key-based auth
+- Workspace isolation: API key → workspace mapping, all queries scoped by workspace
+- ClickHouse encryption at rest (AES-256)
+- TLS 1.3 for all traffic via Cloudflare
+- No PII collection by default
 
 ---
 
-### Onboarding Flow
-
-1. Sign up → get workspace + API key
-2. pip install firefly-sdk
-3. Add one line: instrument_langchain() or @observe_agent("my-agent")
+## Onboarding Flow
+1. Sign up → get workspace + API key (simple form)
+2. `pip install firefly-sdk`
+3. Add one decorator: `@observe_agent("my-agent")`
 4. Run agent → traces appear live
-5. Done.
+5. Done. No config files. No YAML.
+
+---
+
+## Hosting
+
+Hetzner CX22 VPS running Docker:
+- `clickhouse/clickhouse-server` (port 8123)
+- `firefly-backend` (FastAPI + WebSocket)
+- Cloudflare Tunnel for ingress
+- Cloudflare Pages for frontend
+
+---
+
+## Retention Policy
+- Active traces: **30 days** in ClickHouse
+- Full data deletion on workspace deletion (completed within 24 hours)
+
+---
+
+## Backlog (Aspirational — Not in MVP)
+
+### SDKs & Integrations
+- TypeScript SDK with `@observeAgent` decorator
+- Go SDK with context-based tracer
+- LangChain integration (`instrument_langchain()`)
+- Framework integrations (crewAI, autogen, etc.)
+
+### Enhanced Observability
+- Tool invocation tracking
+- Conversation tree visualization
+- Retry/correlation tracking
+- Stream chunk events
+- `total_tokens` field in schema
+
+### Backend & Storage
+- PostgreSQL for user/auth management
+- Multi-tenant admin dashboard
+- Advanced cost analytics (real dollar cost from provider pricing)
+- Configurable retention tiers (7/30/90/365 days)
+- Cloudflare R2 archival
+
+### Alerting
+- Alert engine with Slack, email, webhook channels
+- Metrics: `success_rate`, `error_rate`, `avg_latency_ms`, `cost_per_hour`, `token_spike`
+- Evaluated every 30s via cron
+
+### Frontend Enhancements
+- Conversation replay visualization
+- Trace correlation/dependency view
+- Advanced search/filter
+- Export (JSON/CSV)
+
+### Infrastructure & Compliance
+- Multi-region deployment
+- Auto-scaling
+- Rate limiting and DDoS protection
+- SOC 2 compliance features
+- Advanced audit logging
+
+---
+
+## Immediate Next Steps
+1. Build Python SDK core with `@observe_agent` decorator
+2. Implement ClickHouse ingestion pipeline
+3. Create basic FastAPI backend endpoints
+4. Build simple Next.js dashboard
+5. Add basic API key authentication
+6. Deploy on Hetzner VPS
+7. Test with sample LLM agents
 
 ---
